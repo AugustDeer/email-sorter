@@ -1,0 +1,27 @@
+[project]
+name = "email-sorter"
+version = "0.1.0"
+authors = [
+    {name = "August Deer"},
+]
+description = "A simple classifier to determine whether an email is important or marketing junk."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "accelerate>=1.10.0",
+    "datasets>=4.0.0",
+    "evaluate>=0.4.5",
+    "flash-attn>=2.8.3",
+    "scikit-learn>=1.7.1",
+    "transformers>=4.55.2",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+    "ruff>=0.12.9",
+]
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
