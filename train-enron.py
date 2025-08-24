@@ -1,25 +1,19 @@
 # %%
-import torch as t
+from transformers import pipeline
 
-from email_sorter import fetchData, fetchModel, prepTrainer, testModel
+from email_sorter.train import train_pipeline
 
-# %%
-model, tokenizer = fetchModel("answerdotai/ModernBERT-base")
-train, eval = fetchData("SetFit/enron_spam", tokenizer)
+output = train_pipeline(
+    "answerdotai/ModernBERT-base", "SetFit/enron_spam", "enron_test_model"
+)
 
-# %%
-trainer = prepTrainer(model, tokenizer, train, eval)
-trainer.train()
+classifier = pipeline("text-classification", model=str(output))
 
-model.eval()
-with t.no_grad():
-    metrics = trainer.evaluate()
-    print("Accuracy:", metrics["eval_accuracy"])
+tests = ["Save 50% on new backpacks!", "Reminder: Homework due tomorrow."]
 
-# %%
-test = ["Save 50% on new backpacks!", "Reminder: Homework due tomorrow."]
-predictions = testModel(model, tokenizer, test)
+results = classifier(tests)
 
-for d, p in zip(test, predictions):
-    print(f"Input: {d}")
-    print(*(f"{k} {p[v]}" for k, v in model.config.label2id.items()))
+for test, result in zip(tests, results):
+    print(test)
+    print(result)
+    print()

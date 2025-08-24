@@ -1,23 +1,27 @@
 import logging
+from pathlib import Path
 
 import evaluate
 import numpy as np
-import torch as t
-from datasets import load_dataset
+from datasets import DatasetDict, load_dataset
 from torch.utils.data import Dataset
 from transformers import (
     AutoTokenizer,
+    BatchEncoding,
+    DataCollatorWithPadding,
+    EvalPrediction,
     ModernBertForSequenceClassification,
     PreTrainedTokenizerBase,
     Trainer,
     TrainingArguments,
 )
-from transformers.modeling_outputs import SequenceClassifierOutput
+
+from email_sorter import default_output_dir
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-def fetchModel(
+def prepBaseModel(
     model_name: str,
 ) -> tuple[ModernBertForSequenceClassification, PreTrainedTokenizerBase]:
     """Initializes the specified model and associated tokenizer"""
@@ -28,8 +32,8 @@ def fetchModel(
             model_name,
             num_labels=2,
             device_map="auto",
-            id2label={0: "ham", 1: "spam"},
-            label2id={"ham": 0, "spam": 1},
+            id2label={0: "HAM", 1: "SPAM"},
+            label2id={"HAM": 0, "SPAM": 1},
         )
     )
 
@@ -40,76 +44,61 @@ def fetchModel(
     return model, tokenizer
 
 
-def fetchData(
-    dataset_name: str, tokenizer: PreTrainedTokenizerBase
-) -> tuple[Dataset, Dataset]:
+def prepData(dataset_name: str, tokenizer: PreTrainedTokenizerBase) -> DatasetDict:
     """Imports the specified dataset and tokenizes it."""
 
     # Import dataset
     dataset = load_dataset(dataset_name)
 
     # Process dataset
-    def tokenize(batch: dict[str, list[str]]) -> dict[str, list[str]]:
-        return tokenizer(batch["subject"], padding="max_length", truncation=True).data
+    def tokenize(batch: Dataset) -> BatchEncoding:
+        return tokenizer(batch["text"], truncation=True)
 
     dataset = dataset.map(tokenize, batched=True)
 
-    return dataset["train"], dataset["test"]  # type: ignore
+    return dataset  # type: ignore
 
 
 def prepTrainer(
     model: ModernBertForSequenceClassification,
     tokenizer: PreTrainedTokenizerBase,
-    train: Dataset,
-    eval: Dataset,
+    data: DatasetDict,
+    output_location: Path,
 ) -> Trainer:
     """Creates a Trainer object for the specified model and data."""
-    # Define training arguments
+    accuracy = evaluate.load("accuracy")
+
+    def compute_metrics(eval_pred: EvalPrediction) -> dict[str, float]:
+        predictions, labels = eval_pred
+        predictions = np.argmax(predictions, axis=-1)
+        return accuracy.compute(predictions=predictions, references=labels) or {}
+
     training_args = TrainingArguments(
+        output_dir=str(output_location),
         per_device_train_batch_size=64,
         dataloader_pin_memory=True,
         dataloader_num_workers=6,
         eval_strategy="epoch",
         save_strategy="epoch",
-        output_dir="./output/trained_model",
+        load_best_model_at_end=True,
     )
 
-    metric = evaluate.load("accuracy")
-
-    trainer = Trainer(
+    return Trainer(
         model=model,
         args=training_args,
         processing_class=tokenizer,
-        train_dataset=train,
-        eval_dataset=eval,
-        compute_metrics=lambda eval_pred: metric.compute(
-            predictions=np.argmax(eval_pred.predictions, -1),
-            references=eval_pred.label_ids,
-        )
-        or {},
+        data_collator=DataCollatorWithPadding(tokenizer),
+        train_dataset=data["train"],
+        eval_dataset=data["test"],
+        compute_metrics=compute_metrics,
     )
 
-    return trainer
 
-
-def testModel(
-    model: ModernBertForSequenceClassification,
-    tokenizer: PreTrainedTokenizerBase,
-    data: list[str],
-) -> t.Tensor:
-    """Test model on given strings."""
-    logger.info(f"Testing model on {len(data)} items.")
-
-    inputs = tokenizer(
-        data,
-        return_tensors="pt",
-        padding=True,
-    ).to(model.device)
-
-    with t.no_grad():
-        outputs: SequenceClassifierOutput = model(**inputs)
-
-    logits = outputs.logits
-    assert logits is not None
-    predictions = logits.softmax(-1)
-    return predictions.cpu()
+def train_pipeline(model_name: str, dataset_name: str, output_name: str) -> Path:
+    model, tokenizer = prepBaseModel(model_name)
+    data = prepData(dataset_name, tokenizer)
+    output_location = default_output_dir / output_name
+    trainer = prepTrainer(model, tokenizer, data, output_location)
+    trainer.train()
+    trainer.save_model()
+    return output_location
