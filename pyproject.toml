@@ -13,6 +13,8 @@ dependencies = [
     "evaluate>=0.4.5",
     "flash-attn>=2.8.3",
     "html2text>=2025.4.15",
+    "msgspec>=0.19.0",
+    "rich>=14.1.0",
     "scikit-learn>=1.7.1",
     "transformers>=4.55.2",
 ]
