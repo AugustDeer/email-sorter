@@ -16,7 +16,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from email_sorter import default_output_dir
+from email_sorter import DEFAULT_OUTPUT_DIR
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ def prepTrainer(
 def train_pipeline(model_name: str, dataset_name: str, output_name: str) -> Path:
     model, tokenizer = prepBaseModel(model_name)
     data = prepData(dataset_name, tokenizer)
-    output_location = default_output_dir / output_name
+    output_location = Path(DEFAULT_OUTPUT_DIR, output_name)
     trainer = prepTrainer(model, tokenizer, data, output_location)
     trainer.train()
     trainer.save_model()

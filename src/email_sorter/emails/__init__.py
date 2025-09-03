@@ -1,11 +1,14 @@
+import os
 from typing import BinaryIO, Optional
 
 import msgspec
 
-from .. import default_output_dir
+from email_sorter import DEFAULT_OUTPUT_DIR
+
+DEFAULT_EMAIL_FILE = os.path.join(DEFAULT_OUTPUT_DIR, "emails.json")
 
 
-class Email(msgspec.Struct, omit_defaults=True):
+class Email(msgspec.Struct, omit_defaults=True, frozen=True):
     """Email parameters"""
 
     subject: str
@@ -13,9 +16,8 @@ class Email(msgspec.Struct, omit_defaults=True):
     spam: Optional[bool] = None
 
 
-def loadEmails(filename="emails.json"):
-    with open(default_output_dir / filename) as file:
-        data = file.read()
+def loadEmails(file: BinaryIO):
+    data = file.read()
     emails = msgspec.json.decode(data, type=list[Email])
     return emails
 

@@ -12,6 +12,7 @@ dependencies = [
     "datasets>=4.0.0",
     "evaluate>=0.4.5",
     "flash-attn>=2.8.3",
+    "gradio>=5.44.1",
     "msgspec>=0.19.0",
     "rich>=14.1.0",
     "scikit-learn>=1.7.1",
@@ -29,8 +30,8 @@ requires = ["uv_build"]
 build-backend = "uv_build"
 
 [project.scripts]
-email_download = "email_sorter.emails.download:main"
-email_label = "email_sorter.emails.label:main"
+email_download = "email_sorter.emails.download:demo.launch"
+email_label = "email_sorter.emails.label:demo.launch"
 
 [tool.uv]
 no-build-isolation-package = ["flash-attn"]

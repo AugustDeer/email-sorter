@@ -1,14 +1,13 @@
 import email
 import email.message
 import email.policy
-import os
+import imaplib
 from imaplib import IMAP4_SSL
 
-from rich import print
-from rich.progress import Progress
-from rich.prompt import IntPrompt, Prompt
+import gradio as gr
+import msgspec
 
-from . import Email, saveEmails
+from . import DEFAULT_EMAIL_FILE, Email, saveEmails
 
 
 def fetchEmails(
@@ -44,28 +43,45 @@ def parseEmail(mail: email.message.EmailMessage) -> Email:
     return Email(subject=subject, body=body)
 
 
-def main():
-    address = Prompt.ask("Email address")
-    passwd = Prompt.ask("App Password", password=True)
-    while True:
-        num_emails = IntPrompt.ask("Number of emails to download", default=100)
-        if num_emails > 0:
-            break
-        print("[prompt.invalid]Answer must be positive")
-    dest_dir = Prompt.ask("Output dir", default="./output/")
-    path = os.path.join(dest_dir, "emails.json")
+def fetchParseSave(
+    address: str,
+    password: str,
+    path: str = DEFAULT_EMAIL_FILE,
+    num_emails: int = 100,
+    domain: str = "imap.gmail.com",
+    port: int = 993,
+    progress: gr.Progress = gr.Progress(),
+):
+    try:
+        emails = fetchEmails(
+            address, password, num_emails=num_emails, domain=domain, port=port
+        )
+    except imaplib.IMAP4.error as e:
+        raise gr.Error(str(e))
+    parsed_emails: list[Email] = []
+    for e in progress.tqdm(emails, desc="Parsing...", unit="emails"):
+        parsed_emails.append(parseEmail(e))  # type: ignore
+    with open(path, "wb") as output:
+        saveEmails(parsed_emails, output)
+    gr.Info(f"Downloaded emails to {path}")
+    return [msgspec.structs.asdict(e) for e in parsed_emails]
 
-    with Progress(transient=True) as progress:
-        with progress.console.status("Downloading emails...") as status:
-            emails = fetchEmails(address, passwd, num_emails=num_emails)
-            progress.console.print("Downloaded", len(emails), "emails.")
-            status.update("Parsing emails...")
-            parsed_emails = [parseEmail(e) for e in progress.track(emails)]
-            status.update("Saving emails...")
-            with open(path, "wb") as output:
-                saveEmails(parsed_emails, output)
-        progress.console.print("Saved", len(parsed_emails), "emails to", path)
+
+demo = gr.Interface(
+    fetchParseSave,
+    inputs=[
+        gr.Textbox(type="email"),
+        gr.Textbox(type="password"),
+    ],
+    additional_inputs=[
+        gr.Textbox(DEFAULT_EMAIL_FILE),
+        gr.Number(100),
+        gr.Textbox("imap.gmail.com"),
+        gr.Number(993),
+    ],
+    outputs="json",
+)
 
 
 if __name__ == "__main__":
-    main()
+    demo.launch()
